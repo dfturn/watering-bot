@@ -1,0 +1,19 @@
+discord_token: "YOUR_TOKEN_HERE"
+channel_id: 0
+user_id: 0
+latitude: 45.534709
+longitude: -122.839613
+timezone: "America/Los_Angeles"
+check_time_hour: 8
+
+# Tuning parameters
+baseline_interval_days: 14
+rain_threshold_inches: 1.0
+heavy_rain_threshold_inches: 2.0
+hot_temp_threshold_f: 85
+extreme_heat_threshold_f: 95
+cool_temp_threshold_f: 65
+forecast_rain_skip_inches: 0.5
+alert_window_days: 3
+min_interval_days: 5
+young_plants: true

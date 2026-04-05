@@ -1,0 +1,8 @@
+services:
+  watering-bot:
+    build: .
+    container_name: watering-bot
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./watering_history.json:/app/watering_history.json
