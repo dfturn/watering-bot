@@ -1,9 +1,11 @@
 """Discord bot for watering reminders."""
 
+import asyncio
 import json
 import logging
 from datetime import date, datetime, time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import discord
 import yaml
@@ -12,7 +14,9 @@ from discord.ext import commands, tasks
 from watering_logic import WateringConfig, calculate_watering_status, format_alert_message, format_status_message
 from weather import get_weather_data
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.getLogger("discord").setLevel(logging.INFO)
+logging.getLogger("discord.gateway").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 HISTORY_FILE = Path(__file__).parent / "watering_history.json"
@@ -110,7 +114,9 @@ def create_bot(cfg: dict) -> commands.Bot:
         if not daily_check.is_running():
             daily_check.start()
 
-    @tasks.loop(time=time(hour=cfg.get("check_time_hour", 8)))
+    tz = ZoneInfo(cfg.get("timezone", "America/Los_Angeles"))
+
+    @tasks.loop(time=time(hour=cfg.get("check_time_hour", 8), tzinfo=tz))
     async def daily_check():
         """Run the daily watering check."""
         channel = bot.get_channel(cfg["channel_id"])
@@ -119,7 +125,7 @@ def create_bot(cfg: dict) -> commands.Bot:
             return
 
         try:
-            weather = get_weather_data(cfg["latitude"], cfg["longitude"])
+            weather = await asyncio.to_thread(get_weather_data, cfg["latitude"], cfg["longitude"])
             bot.api_fail_count = 0
         except Exception:
             bot.api_fail_count += 1
@@ -149,11 +155,15 @@ def create_bot(cfg: dict) -> commands.Bot:
     async def before_daily_check():
         await bot.wait_until_ready()
 
+    @daily_check.error
+    async def daily_check_error(error):
+        logger.exception("daily_check failed", exc_info=error)
+
     @bot.command(name="watered")
     async def cmd_watered(ctx, date_str: str | None = None):
         """Log a watering event. Optionally provide a date: !watered 2026-04-03"""
         try:
-            watering_date = date.fromisoformat(date_str) if date_str else date.today()
+            watering_date = date.fromisoformat(date_str) if date_str else datetime.now(tz).date()
         except ValueError:
             await ctx.send("Invalid date format. Use YYYY-MM-DD, e.g. `!watered 2026-04-03`")
             return
@@ -167,7 +177,7 @@ def create_bot(cfg: dict) -> commands.Bot:
     async def cmd_status(ctx):
         """Show current watering status."""
         try:
-            weather = get_weather_data(cfg["latitude"], cfg["longitude"])
+            weather = await asyncio.to_thread(get_weather_data, cfg["latitude"], cfg["longitude"])
         except Exception:
             await ctx.send("Could not fetch weather data. Try again later.")
             return
@@ -207,7 +217,7 @@ def create_bot(cfg: dict) -> commands.Bot:
         if message.author.id != bot.user.id:
             return
 
-        today = date.today()
+        today = datetime.now(tz).date()
         if log_watering(today, source="reaction"):
             await channel.send(f"Got it — logged watering for {today.strftime('%B %d, %Y')}.")
 
