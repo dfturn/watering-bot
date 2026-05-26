@@ -15,10 +15,13 @@ class WateringConfig:
     heavy_rain_threshold_inches: float = 2.0
     hot_temp_threshold_f: float = 85.0
     extreme_heat_threshold_f: float = 95.0
+    mild_temp_threshold_f: float = 75.0
     cool_temp_threshold_f: float = 65.0
     forecast_rain_skip_inches: float = 0.5
     alert_window_days: int = 3
     min_interval_days: int = 5
+    # Kept for backward compatibility / reporting. No longer shortens the
+    # interval: the baseline only drops below 14 days when the weather is hot.
     young_plants: bool = True
 
 
@@ -52,22 +55,26 @@ def calculate_effective_interval(weather: WeatherData, config: WateringConfig) -
     elif weather.past_week_rain_inches > 0.5:
         rain_adj = 1
 
-    # Heat adjustment (past 7 days avg max temp)
+    # Temperature adjustment (past 7 days avg max temp). The baseline only
+    # drops below 14 days when it's genuinely hot; mild and cool weeks extend
+    # it instead of leaving it at baseline.
     temp_adj = 0
     if weather.past_week_avg_max_temp_f > config.extreme_heat_threshold_f:
         temp_adj = -4
     elif weather.past_week_avg_max_temp_f > config.hot_temp_threshold_f:
         temp_adj = -2
     elif weather.past_week_avg_max_temp_f < config.cool_temp_threshold_f:
-        temp_adj = 2
+        temp_adj = 5
+    elif weather.past_week_avg_max_temp_f < config.mild_temp_threshold_f:
+        temp_adj = 3
 
     # Forecast adjustment
     forecast_adj = 0
     if weather.forecast_3day_rain_inches > config.forecast_rain_skip_inches:
         forecast_adj = 2
 
-    # Young plants modifier
-    young_adj = -2 if config.young_plants else 0
+    # Young plants no longer shortens the interval (see WateringConfig).
+    young_adj = 0
 
     interval += rain_adj + temp_adj + forecast_adj + young_adj
 

@@ -12,6 +12,7 @@ rain_threshold_inches: 1.0
 heavy_rain_threshold_inches: 2.0
 hot_temp_threshold_f: 85
 extreme_heat_threshold_f: 95
+mild_temp_threshold_f: 75
 cool_temp_threshold_f: 65
 forecast_rain_skip_inches: 0.5
 alert_window_days: 3

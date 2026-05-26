@@ -51,29 +51,30 @@ class TestCalculateEffectiveInterval:
         assert forecast == 0
         assert young == 0
 
-    def test_young_plants_reduces_interval(self):
-        weather = make_weather()
+    def test_young_plants_does_not_reduce_interval(self):
+        """young_plants no longer shortens the interval — baseline holds at 14."""
+        weather = make_weather()  # mild 75F, no rain
         interval, _, _, _, young = calculate_effective_interval(weather, DEFAULT_CONFIG)
-        assert young == -2
-        assert interval == 12  # 14 - 2
+        assert young == 0
+        assert interval == 14
 
     def test_heavy_rain_extends_interval(self):
         weather = make_weather(past_rain=2.5)
         interval, rain, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert rain == 5
-        assert interval == 17  # 14 + 5 - 2 (young)
+        assert interval == 19  # 14 + 5
 
     def test_moderate_rain_extends_interval(self):
         weather = make_weather(past_rain=1.5)
         interval, rain, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert rain == 3
-        assert interval == 15  # 14 + 3 - 2
+        assert interval == 17  # 14 + 3
 
     def test_light_rain_small_extension(self):
         weather = make_weather(past_rain=0.7)
         interval, rain, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert rain == 1
-        assert interval == 13  # 14 + 1 - 2
+        assert interval == 15  # 14 + 1
 
     def test_no_rain_no_adjustment(self):
         weather = make_weather(past_rain=0.3)
@@ -84,25 +85,39 @@ class TestCalculateEffectiveInterval:
         weather = make_weather(past_temp=97)
         interval, _, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert temp == -4
-        assert interval == 8  # 14 - 4 - 2
+        assert interval == 10  # 14 - 4
 
     def test_hot_weather_shortens_interval(self):
         weather = make_weather(past_temp=90)
         interval, _, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert temp == -2
-        assert interval == 10  # 14 - 2 - 2
+        assert interval == 12  # 14 - 2
+
+    def test_warm_weather_holds_baseline(self):
+        """75-85F is the neutral band — no adjustment."""
+        weather = make_weather(past_temp=80)
+        interval, _, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
+        assert temp == 0
+        assert interval == 14
+
+    def test_mild_weather_extends_interval(self):
+        """65-75F (e.g. a 69F Portland week) extends the interval."""
+        weather = make_weather(past_temp=69)
+        interval, _, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
+        assert temp == 3
+        assert interval == 17  # 14 + 3
 
     def test_cool_weather_extends_interval(self):
         weather = make_weather(past_temp=55)
         interval, _, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
-        assert temp == 2
-        assert interval == 14  # 14 + 2 - 2
+        assert temp == 5
+        assert interval == 19  # 14 + 5
 
     def test_forecast_rain_extends_interval(self):
         weather = make_weather(forecast_rain_3d=1.0)
         interval, _, _, forecast, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert forecast == 2
-        assert interval == 14  # 14 + 2 - 2
+        assert interval == 16  # 14 + 2
 
     def test_forecast_rain_below_threshold_no_adjustment(self):
         weather = make_weather(forecast_rain_3d=0.3)
@@ -110,43 +125,43 @@ class TestCalculateEffectiveInterval:
         assert forecast == 0
 
     def test_minimum_clamp(self):
-        """Extreme heat + young plants should not go below min_interval_days."""
+        """Extreme heat should not go below min_interval_days."""
         weather = make_weather(past_temp=100)
         interval, _, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert interval >= DEFAULT_CONFIG.min_interval_days
-        assert interval == 8  # 14 - 4 - 2 = 8, above min of 5
+        assert interval == 10  # 14 - 4 = 10, above min of 5
 
     def test_minimum_clamp_enforced(self):
         """Artificially low baseline to test clamp."""
-        config = WateringConfig(baseline_interval_days=6, young_plants=True, min_interval_days=5)
+        config = WateringConfig(baseline_interval_days=6, min_interval_days=5)
         weather = make_weather(past_temp=97)  # -4 adjustment
         interval, _, _, _, _ = calculate_effective_interval(weather, config)
-        # 6 - 4 - 2 = 0, should clamp to 5
+        # 6 - 4 = 2, should clamp to 5
         assert interval == 5
 
     def test_no_maximum_clamp(self):
         """Rainy + cool + forecast rain → interval can grow unbounded."""
         weather = make_weather(past_rain=3.0, past_temp=50, forecast_rain_3d=2.0)
-        config = WateringConfig(young_plants=False)
+        config = WateringConfig()
         interval, rain, temp, forecast, _ = calculate_effective_interval(weather, config)
         assert rain == 5
-        assert temp == 2
+        assert temp == 5
         assert forecast == 2
-        assert interval == 23  # 14 + 5 + 2 + 2
+        assert interval == 26  # 14 + 5 + 5 + 2
 
     def test_winter_portland_scenario(self):
         """Typical Portland winter: constant rain, cool temps."""
         weather = make_weather(past_rain=2.5, past_temp=48, forecast_rain_3d=1.5)
         interval, _, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
-        # 14 + 5 (heavy rain) + 2 (cool) + 2 (forecast) - 2 (young) = 21
-        assert interval == 21
+        # 14 + 5 (heavy rain) + 5 (cool) + 2 (forecast) = 26
+        assert interval == 26
 
     def test_summer_portland_scenario(self):
         """Typical Portland summer: hot, dry."""
         weather = make_weather(past_rain=0, past_temp=92, forecast_rain_3d=0)
         interval, _, _, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
-        # 14 - 2 (hot) - 2 (young) = 10
-        assert interval == 10
+        # 14 - 2 (hot) = 12
+        assert interval == 12
 
     def test_hot_but_rainy(self):
         """Hot week but also rainy — adjustments stack."""
@@ -154,8 +169,20 @@ class TestCalculateEffectiveInterval:
         interval, rain, temp, _, _ = calculate_effective_interval(weather, DEFAULT_CONFIG)
         assert rain == 3
         assert temp == -2
-        # 14 + 3 - 2 - 2 = 13
-        assert interval == 13
+        # 14 + 3 - 2 = 15
+        assert interval == 15
+
+    def test_reported_too_frequent_scenario(self):
+        """Regression: 0.5\" rain, 69F, watered 11 days ago was firing 'in 1 day'.
+        It should now sit comfortably above the alert window."""
+        weather = make_weather(past_rain=0.5, past_temp=69)
+        status = calculate_watering_status(
+            date(2026, 5, 14), weather, DEFAULT_CONFIG, today=date(2026, 5, 25)
+        )
+        assert status.effective_interval == 17  # 14 + 3 (mild), no young reduction
+        assert status.days_since_last_watering == 11
+        assert status.days_until_due == 6
+        assert status.should_alert is False
 
 
 class TestCalculateWateringStatus:
@@ -173,16 +200,16 @@ class TestCalculateWateringStatus:
         )
         assert status.should_alert is False
         assert status.days_since_last_watering == 2
-        # interval = 12 (14 - 2 young), due in 10 days
-        assert status.days_until_due == 10
+        # interval = 14 (mild 75F, no young reduction), due in 12 days
+        assert status.days_until_due == 12
 
     def test_due_soon_alerts(self):
         weather = make_weather()
         status = calculate_watering_status(
-            date(2026, 7, 4), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
+            date(2026, 7, 2), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
         )
-        # 11 days since watering, interval = 12, due in 1 day
-        assert status.days_since_last_watering == 11
+        # 13 days since watering, interval = 14, due in 1 day
+        assert status.days_since_last_watering == 13
         assert status.days_until_due == 1
         assert status.should_alert is True
 
@@ -198,9 +225,9 @@ class TestCalculateWateringStatus:
     def test_alert_window_boundary(self):
         """Exactly at alert_window_days should trigger."""
         weather = make_weather()
-        # interval = 12, watered 9 days ago → due in 3 days = alert_window_days
+        # interval = 14, watered 11 days ago → due in 3 days = alert_window_days
         status = calculate_watering_status(
-            date(2026, 7, 6), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
+            date(2026, 7, 4), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
         )
         assert status.days_until_due == 3
         assert status.should_alert is True
@@ -208,9 +235,9 @@ class TestCalculateWateringStatus:
     def test_one_day_past_alert_window(self):
         """One day past alert window should NOT trigger."""
         weather = make_weather()
-        # interval = 12, watered 8 days ago → due in 4 days > alert_window_days
+        # interval = 14, watered 10 days ago → due in 4 days > alert_window_days
         status = calculate_watering_status(
-            date(2026, 7, 7), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
+            date(2026, 7, 5), weather, DEFAULT_CONFIG, today=date(2026, 7, 15)
         )
         assert status.days_until_due == 4
         assert status.should_alert is False
@@ -218,13 +245,13 @@ class TestCalculateWateringStatus:
     def test_winter_no_alert(self):
         """Winter scenario: long interval means no alert even after weeks."""
         weather = make_weather(past_rain=2.5, past_temp=48, forecast_rain_3d=1.5)
-        # interval = 21
+        # interval = 26
         status = calculate_watering_status(
             date(2026, 1, 1), weather, DEFAULT_CONFIG, today=date(2026, 1, 15)
         )
-        assert status.effective_interval == 21
+        assert status.effective_interval == 26
         assert status.days_since_last_watering == 14
-        assert status.days_until_due == 7
+        assert status.days_until_due == 12
         assert status.should_alert is False
 
 

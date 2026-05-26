@@ -55,11 +55,12 @@ rain_threshold_inches: 1.0
 heavy_rain_threshold_inches: 2.0
 hot_temp_threshold_f: 85
 extreme_heat_threshold_f: 95
+mild_temp_threshold_f: 75
 cool_temp_threshold_f: 65
 forecast_rain_skip_inches: 0.5
 alert_window_days: 3
 min_interval_days: 5
-young_plants: true
+young_plants: true  # retained for back-compat; no longer affects interval
 ```
 
 All thresholds are configurable. No hardcoded magic numbers in the logic.
@@ -113,16 +114,22 @@ if past_week_rain > 2.0":  effective_interval += 5
 elif past_week_rain > 1.0": effective_interval += 3
 elif past_week_rain > 0.5": effective_interval += 1
 
-# Heat adjustment (past 7 days avg max temp)
+# Temperature adjustment (past 7 days avg max temp)
+# The baseline only drops below 14 when it's genuinely hot; mild/cool
+# weeks extend it. (Revised 2026-05-25: watering was firing too often in
+# mild weather — see note below.)
 if avg_max_temp > 95F: effective_interval -= 4
 elif avg_max_temp > 85F: effective_interval -= 2
-elif avg_max_temp < 65F: effective_interval += 2
+elif avg_max_temp < 65F: effective_interval += 5
+elif avg_max_temp < 75F: effective_interval += 3   # mild (e.g. 69F)
 
 # Forecast adjustment
 if forecast_rain_next_3_days > 0.5": effective_interval += 2
 
-# Young plants modifier
-if young_plants: effective_interval -= 2
+# Young plants modifier — disabled 2026-05-25.
+# Previously subtracted 2 days unconditionally, which pushed the interval
+# below baseline even in cool/wet weather. Kept as a config flag for
+# back-compat but no longer affects the interval.
 
 # Clamp — minimum only, no maximum
 effective_interval = max(effective_interval, min_interval_days)  # default min: 5
@@ -137,7 +144,8 @@ should_alert = days_until_due <= alert_window_days
 
 - **No watering history (first run):** Treat as immediately due, send alert.
 - **Cool rainy winter:** Effective interval grows unbounded — no reminders sent.
-- **Hot + rainy:** Heat and rain adjustments stack. A week with 1.5" of rain but 90F avg highs yields: +3 (rain) -2 (heat) -2 (young) = interval of 13. Still alerts appropriately.
+- **Hot + rainy:** Heat and rain adjustments stack. A week with 1.5" of rain but 90F avg highs yields: +3 (rain) -2 (heat) = interval of 15. Still alerts appropriately.
+- **Mild + light rain:** A week with 0.5" rain and 69F avg highs yields: +0 (rain) +3 (mild) = interval of 17. Watered 11 days ago → due in 6 days, no premature alert.
 
 ## Discord Bot Behavior
 

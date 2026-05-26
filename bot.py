@@ -44,6 +44,7 @@ def make_watering_config(cfg: dict) -> WateringConfig:
         heavy_rain_threshold_inches=cfg.get("heavy_rain_threshold_inches", 2.0),
         hot_temp_threshold_f=cfg.get("hot_temp_threshold_f", 85.0),
         extreme_heat_threshold_f=cfg.get("extreme_heat_threshold_f", 95.0),
+        mild_temp_threshold_f=cfg.get("mild_temp_threshold_f", 75.0),
         cool_temp_threshold_f=cfg.get("cool_temp_threshold_f", 65.0),
         forecast_rain_skip_inches=cfg.get("forecast_rain_skip_inches", 0.5),
         alert_window_days=cfg.get("alert_window_days", 3),
